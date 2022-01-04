@@ -16,6 +16,7 @@ import (
 type JobStatus struct {
 	Completed bool
 	Created   bool
+	Removing  bool
 }
 
 func ApplyK8sSystemJob(jobYaml, kubeConfigPath string, k8sWrapTransport transport.WrapperFunc, timeout int, addonUpdated bool) error {
@@ -34,9 +35,10 @@ func ApplyK8sSystemJob(jobYaml, kubeConfigPath string, k8sWrapTransport transpor
 	if err != nil {
 		return err
 	}
+
 	// if the addon configMap is updated, or the previous job is not completed,
 	// I will remove the existing job first, if any
-	if addonUpdated || (jobStatus.Created && !jobStatus.Completed) {
+	if addonUpdated || (jobStatus.Created && (!jobStatus.Completed || jobStatus.Removing)) {
 		logrus.Debugf("[k8s] replacing job %s.. ", job.Name)
 		if err := DeleteK8sSystemJob(jobYaml, k8sClient, timeout); err != nil {
 			return err
@@ -132,11 +134,13 @@ func GetK8sJobStatus(k8sClient *kubernetes.Clientset, name, namespace string) (J
 			return JobStatus{
 				Created:   true,
 				Completed: true,
+				Removing:  existingJob.DeletionTimestamp != nil,
 			}, err
 		}
 	}
 	return JobStatus{
 		Created:   true,
 		Completed: false,
+		Removing:  existingJob.DeletionTimestamp != nil,
 	}, nil
 }
