@@ -449,6 +449,16 @@ func RunEtcdSnapshotSave(ctx context.Context, etcdHost *hosts.Host, prsMap map[s
 		if err := docker.DoRemoveContainer(ctx, etcdHost.DClient, EtcdSnapshotOnceContainerName, etcdHost.Address); err != nil {
 			return err
 		}
+
+		log.Debugf(ctx, "[etcd] Checking if etcd is running on host [%s]", etcdHost.Address)
+		ok, err := docker.IsContainerRunning(ctx, etcdHost.DClient, etcdHost.Address, "etcd", true)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("etcd is not running on host [%s]", etcdHost.Address)
+		}
+
 		if err := docker.DoRunContainer(ctx, etcdHost.DClient, imageCfg, hostCfg, EtcdSnapshotOnceContainerName, etcdHost.Address, ETCDRole, prsMap); err != nil {
 			return err
 		}

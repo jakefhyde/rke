@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/rancher/rke/types"
 	"github.com/sirupsen/logrus"
 
 	"github.com/rancher/rke/docker"
@@ -17,16 +18,40 @@ import (
 
 func (c *Cluster) SnapshotEtcd(ctx context.Context, snapshotName string) error {
 	backupImage := c.getBackupImage()
+
+	host := c.EtcdHosts[0]
+	if err := c.SnapshotEtcdOnHost(ctx, snapshotName, backupImage, host, c.Services.Etcd); err != nil {
+		return err
+	}
+
+	if len(c.EtcdHosts) == 1 {
+		return nil
+	}
+
+	// Only one node needs to upload the s3 backup.
+	service := c.Services.Etcd.DeepCopy()
+	if service.BackupConfig != nil {
+		service.BackupConfig.S3BackupConfig = nil
+	}
+
 	for _, host := range c.EtcdHosts {
-		containerTimeout := DefaultEtcdBackupConfigTimeout
-		if c.Services.Etcd.BackupConfig != nil && c.Services.Etcd.BackupConfig.Timeout > 0 {
-			containerTimeout = c.Services.Etcd.BackupConfig.Timeout
-		}
-		newCtx := context.WithValue(ctx, docker.WaitTimeoutContextKey, containerTimeout)
-		if err := services.RunEtcdSnapshotSave(newCtx, host, c.PrivateRegistriesMap, backupImage, snapshotName, true, c.Services.Etcd, c.Version); err != nil {
+		if err := c.SnapshotEtcdOnHost(ctx, snapshotName, backupImage, host, *service); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+func (c *Cluster) SnapshotEtcdOnHost(ctx context.Context, snapshotName, backupImage string, host *hosts.Host, service types.ETCDService) error {
+	containerTimeout := DefaultEtcdBackupConfigTimeout
+	if c.Services.Etcd.BackupConfig != nil && c.Services.Etcd.BackupConfig.Timeout > 0 {
+		containerTimeout = c.Services.Etcd.BackupConfig.Timeout
+	}
+	newCtx := context.WithValue(ctx, docker.WaitTimeoutContextKey, containerTimeout)
+	if err := services.RunEtcdSnapshotSave(newCtx, host, c.PrivateRegistriesMap, backupImage, snapshotName, true, c.Services.Etcd, c.Version); err != nil {
+		return err
+	}
+
 	return nil
 }
 
