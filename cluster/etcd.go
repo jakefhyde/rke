@@ -17,15 +17,21 @@ import (
 
 func (c *Cluster) SnapshotEtcd(ctx context.Context, snapshotName string) error {
 	backupImage := c.getBackupImage()
+	success := false
 	for _, host := range c.EtcdHosts {
 		containerTimeout := DefaultEtcdBackupConfigTimeout
 		if c.Services.Etcd.BackupConfig != nil && c.Services.Etcd.BackupConfig.Timeout > 0 {
 			containerTimeout = c.Services.Etcd.BackupConfig.Timeout
 		}
+		// only upload first snapshot to s3
+		if success && c.Services.Etcd.BackupConfig.S3BackupConfig != nil {
+			c.Services.Etcd.BackupConfig.S3BackupConfig = nil
+		}
 		newCtx := context.WithValue(ctx, docker.WaitTimeoutContextKey, containerTimeout)
 		if err := services.RunEtcdSnapshotSave(newCtx, host, c.PrivateRegistriesMap, backupImage, snapshotName, true, c.Services.Etcd, c.Version); err != nil {
 			return err
 		}
+		success = true
 	}
 	return nil
 }

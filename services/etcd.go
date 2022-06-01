@@ -460,6 +460,9 @@ func RunEtcdSnapshotSave(ctx context.Context, etcdHost *hosts.Host, prsMap map[s
 			if err != nil {
 				return err
 			}
+			if strings.Contains(stderr, "failed to upload etcd snapshot file") {
+				return fmt.Errorf("[etcd] Failed to upload snapshot to s3 on host [%s], exit code [%d]: %v", etcdHost.Address, status, stderr)
+			}
 			return fmt.Errorf("[etcd] Failed to take one-time snapshot on host [%s], exit code [%d]: %v", etcdHost.Address, status, stderr)
 		}
 
